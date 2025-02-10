@@ -1,0 +1,441 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dopamine Clicker</title>
+  <style>
+    /* Centered layout using flex */
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+      background-color: #f4f4f4;
+      position: relative;
+    }
+    
+    /* Arrange the controls in a centered column */
+    #controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    /* Decrease button size by 50% compared to original values */
+    button {
+      font-size: 7px; /* originally 14px */
+      padding: 5px 8px; /* originally 10px 16px */
+      cursor: pointer;
+      margin: 4px; /* originally 8px */
+      border: none;
+      border-radius: 2.5px; /* originally 5px */
+      transition: all 0.2s ease-in-out;
+    }
+    
+    button:hover {
+      transform: scale(1.1);
+      opacity: 0.8;
+    }
+    
+    /* Button colors */
+    #dopamine-button { background-color: #ffcc00; }
+    #single-pull { background-color: #4caf50; color: white; }
+    #upgrade-button { background-color: #2196F3; color: white; }
+    #auto-clicker-button { background-color: #f44336; color: white; }
+    
+    /* Decrease dopamine count font size by 50% (from 18px to 9px) */
+    #dopamine-count {
+      font-size: 9px;
+      margin-top: 6px;
+      font-weight: bold;
+    }
+    
+    .video-wrapper {
+      position: absolute;
+      border-radius: 8px;
+      overflow: hidden;
+      width: 201.6px;
+      height: 112.8px;
+    }
+    
+    .video-wrapper iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    
+    .message-box {
+      font-size: 20px;
+      font-weight: bold;
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      display: none;
+      z-index: 20;
+    }
+    
+    @keyframes jumpAndFall {
+      0% { transform: translateY(0); opacity: 1; }
+      50% { transform: translateY(-50px); }
+      100% { transform: translateY(0); opacity: 0; }
+    }
+    
+    /* New style for the quotes popup */
+    #quote-popup {
+      font-size: 9px;
+      font-weight: bold;
+      position: absolute;
+      bottom: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      display: none;
+      z-index: 30;
+    }
+  </style>
+</head>
+<body>
+  <!-- Controls container -->
+  <div id="controls">
+    <button id="dopamine-button">Click for Dopamine</button>
+    <p id="dopamine-count">Dopamine: 0</p>
+    <button id="single-pull">Single Pull (10 Dopamine)</button>
+    <button id="upgrade-button">ASMR Rain Sounds (200 Dopamine)</button>
+    <button id="auto-clicker-button">Auto-Clicker (500 Dopamine)</button>
+  </div>
+  
+  <div id="video-container"></div>
+  <!-- Message box used to display temporary messages -->
+  <div id="message-box" class="message-box"></div>
+  
+  <!-- New element for quotes -->
+  <div id="quote-popup"></div>
+  
+  <!-- Audio element for click sound -->
+  <audio id="click-sound" src="click-sound.mp3" preload="auto"></audio>
+  
+  <script>
+    let dopamine = 0;
+    let videoPositions = [];
+    let autoClickerActive = false;
+    
+    const dopamineButton = document.getElementById("dopamine-button");
+    const display = document.getElementById("dopamine-count");
+    const singlePullButton = document.getElementById("single-pull");
+    const upgradeButton = document.getElementById("upgrade-button");
+    const autoClickerButton = document.getElementById("auto-clicker-button");
+    const videoContainer = document.getElementById("video-container");
+    const messageBox = document.getElementById("message-box");
+    const clickSound = document.getElementById("click-sound");
+    
+    /* Video links reintroduced with classifications.
+       Probabilities:
+         - Common: 45%
+         - Rare: 30%
+         - Legendary: 25%
+       Each object contains a URL and a short name.
+    */
+    const videoLinks = {
+      common: [
+        { url: "https://youtu.be/g10mxnFyRTw?si=bp99zBxRenzxjlSY&t=28", name: "Makeup" },
+        { url: "https://www.youtube.com/watch?v=CXJJDxg7Mos", name: "Cat" },
+        { url: "https://www.youtube.com/watch?v=RZV4oXuTZlA", name: "Fruit" }
+      ],
+      rare: [
+        { url: "https://www.youtube.com/watch?v=L_fcrOyoWZ8", name: "Subway" },
+        { url: "https://www.youtube.com/watch?v=VahKXgW2nXc", name: "Press" },
+        { url: "https://www.youtube.com/watch?v=lcPTDc9vHkE", name: "Slime" },
+        { url: "https://www.youtube.com/watch?v=5l8khj88MFQ", name: "Lofi" }
+      ],
+      legendary: [
+        { url: "https://www.youtube.com/watch?v=uO1NPnoU2kQ", name: "Skibidi" },
+        { url: "https://www.youtube.com/watch?v=_5JUwIxzoCk", name: "Reddit" },
+        { url: "https://www.youtube.com/watch?v=JM0rVGxCBZg", name: "Miku" },
+            ]
+    };
+    
+    /* Determine category by weighted chance */
+    function getRandomCategory() {
+      const r = Math.random();
+      if (r < 0.45) return "common";
+      else if (r < 0.75) return "rare";
+      else return "legendary";
+    }
+    
+    function updateDisplay() {
+      display.textContent = `Dopamine: ${dopamine}`;
+    }
+    
+    dopamineButton.addEventListener("click", () => {
+      dopamine++;
+      updateDisplay();
+      clickSound.play();
+    });
+    
+    // Generic function to display a temporary message.
+    function showMessage(message) {
+      messageBox.innerHTML = message;
+      messageBox.style.display = "block";
+      setTimeout(() => {
+        messageBox.style.display = "none";
+      }, 3000);
+    }
+    
+    // Helper function to convert standard YouTube URLs to embed format.
+    function getEmbedUrl(url) {
+      if (url.includes("youtube.com/embed/")) return url;
+      let videoId;
+      if (url.includes("youtube.com/watch?v=")) {
+        const urlObj = new URL(url);
+        videoId = urlObj.searchParams.get("v");
+        return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`;
+      } else if (url.includes("youtu.be/")) {
+        const match = url.match(/youtu\.be\/([^?]+)/);
+        if (match && match[1]) {
+          videoId = match[1];
+          return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`;
+        }
+      }
+      return url;
+    }
+    
+    // Finds a safe position for the new video so it doesn't overlap the controls or existing videos.
+    function getSafePosition(width, height) {
+      const maxAttempts = 100;
+      const minX = 10;
+      const maxX = window.innerWidth - width - 10;
+      const minY = 10;
+      const maxY = window.innerHeight - height - 10;
+      
+      const controls = document.getElementById("controls");
+      const controlsRect = controls.getBoundingClientRect();
+      
+      for (let i = 0; i < maxAttempts; i++) {
+        const x = Math.random() * (maxX - minX) + minX;
+        const y = Math.random() * (maxY - minY) + minY;
+        
+        const overlapExisting = videoPositions.some(pos => 
+          x < pos.x + pos.width && x + width > pos.x &&
+          y < pos.y + pos.height && y + height > pos.y
+        );
+        
+        const videoRect = { left: x, right: x + width, top: y, bottom: y + height };
+        
+        const overlapControls = !(
+          videoRect.right < controlsRect.left ||
+          videoRect.left > controlsRect.right ||
+          videoRect.bottom < controlsRect.top ||
+          videoRect.top > controlsRect.bottom
+        );
+        
+        if (!overlapExisting && !overlapControls) {
+          videoPositions.push({ x, y, width, height });
+          return { x, y };
+        }
+      }
+      
+      // Default position if no safe spot is found.
+      const defaultX = minX;
+      const defaultY = controlsRect.bottom + 10;
+      videoPositions.push({ x: defaultX, y: defaultY, width, height });
+      return { x: defaultX, y: defaultY };
+    }
+    
+    // Single Pull functionality (costs 10 dopamine)
+    singlePullButton.addEventListener("click", () => {
+      if (dopamine >= 10) {
+        dopamine -= 10;
+        updateDisplay();
+        
+        const category = getRandomCategory();
+        let pool = videoLinks[category];
+        
+        if (!pool || pool.length === 0) {
+          showMessage("No new videos available in " + category + " category!");
+          return;
+        }
+        
+        // Select a random video object from the chosen category.
+        const selectedIndex = Math.floor(Math.random() * pool.length);
+        const videoObj = pool[selectedIndex];
+        const videoSrc = videoObj.url;
+        const videoName = videoObj.name;
+        const embedUrl = getEmbedUrl(videoSrc);
+        
+        // Check if this video is already on screen.
+        const existingVideos = document.querySelectorAll('.video-wrapper iframe');
+        let alreadyExists = false;
+        existingVideos.forEach((iframe) => {
+          if (iframe.src === embedUrl) {
+            alreadyExists = true;
+          }
+        });
+        
+        if (alreadyExists) {
+          showMessage("You already have this video!");
+          return;
+        }
+        
+        // Remove the video from the pool since it is now being pulled.
+        pool.splice(selectedIndex, 1);
+        
+        // Show the message with the category and short name.
+        showMessage("You pulled a " + category + " video: " + videoName + "!");
+    
+        const videoWrapper = document.createElement("div");
+        videoWrapper.classList.add("video-wrapper");
+    
+        const { x, y } = getSafePosition(201.6, 112.8);
+        videoWrapper.style.left = `${x}px`;
+        videoWrapper.style.top = `${y}px`;
+        // Set border color based on category.
+        if (category === "common") {
+          videoWrapper.style.border = "6px solid gray";
+        } else if (category === "rare") {
+          videoWrapper.style.border = "6px solid lavender";
+        } else if (category === "legendary") {
+          videoWrapper.style.border = "6px solid gold";
+        }
+    
+        const iframe = document.createElement("iframe");
+        iframe.src = embedUrl;
+        iframe.allow = "autoplay; encrypted-media";
+        videoWrapper.appendChild(iframe);
+        videoContainer.appendChild(videoWrapper);
+      }
+    });
+    
+    // Upgrade: ASMR Rain Sounds (costs 200 dopamine)
+    upgradeButton.addEventListener("click", () => {
+      if (dopamine >= 200) {
+        dopamine -= 200;
+        updateDisplay();
+        if (!document.getElementById("rain-player")) {
+          const rainIframe = document.createElement("iframe");
+          rainIframe.id = "rain-player";
+          rainIframe.allow = "autoplay; encrypted-media";
+          rainIframe.src = "https://www.youtube.com/embed/q76bMs-NwRk?autoplay=1&controls=0&modestbranding=1&loop=1&playlist=q76bMs-NwRk&mute=0";
+          rainIframe.style.position = "absolute";
+          rainIframe.style.left = "-9999px";
+          rainIframe.style.width = "1px";
+          rainIframe.style.height = "1px";
+          document.body.appendChild(rainIframe);
+        }
+        upgradeButton.remove();
+        showMessage("ASMR Rain activated!");
+      }
+    });
+    
+    // Upgrade: Auto-Clicker (costs 500 dopamine)
+    autoClickerButton.addEventListener("click", () => {
+      if (!autoClickerActive && dopamine >= 500) {
+        dopamine -= 500;
+        updateDisplay();
+        autoClickerActive = true;
+        setInterval(() => {
+          dopamine++;
+          updateDisplay();
+          clickSound.play();
+        }, 1000);
+        showMessage("Auto-Clicker activated!");
+      }
+    });
+    
+    updateDisplay();
+    
+    /* NEW FEATURE: Random Surprise Button
+       This button spawns at a random location, disappears after 3 seconds,
+       and if clicked, opens a new window with the specified link.
+    */
+    function spawnRandomButton() {
+      const randomButton = document.createElement("button");
+      randomButton.textContent = "Surprise!";
+      randomButton.style.position = "absolute";
+      randomButton.style.fontSize = "7px";
+      randomButton.style.padding = "5px 8px";
+      randomButton.style.cursor = "pointer";
+      randomButton.style.border = "none";
+      randomButton.style.borderRadius = "2.5px";
+      randomButton.style.backgroundColor = "#8e44ad";
+      
+      const buttonWidth = 100;
+      const buttonHeight = 30;
+      const randomX = Math.random() * (window.innerWidth - buttonWidth);
+      const randomY = Math.random() * (window.innerHeight - buttonHeight);
+      randomButton.style.left = randomX + "px";
+      randomButton.style.top = randomY + "px";
+      
+      document.body.appendChild(randomButton);
+      
+      randomButton.addEventListener("click", () => {
+        // Use additional window features to help ensure the new window opens
+        window.open("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "_blank", "noopener,noreferrer");
+      });
+      
+      setTimeout(() => {
+        if (document.body.contains(randomButton)) {
+          randomButton.remove();
+        }
+      }, 3000);
+    }
+    
+    setInterval(spawnRandomButton, 45000);
+    
+    /* NEW FEATURE: Quotes Popup
+       A new quote from the list below will pop up for 10 seconds, then disappear for 10 seconds.
+       Each quote is chosen at random.
+    */
+    const quotes = [
+      "🖱️ The Clicker’s Creed = “Maximize dopamine. Minimize thinking.”",
+      "🖱️ The Clicker’s Creed = “Every click is a step closer to enlightenment.”",
+      "🖱️ The Clicker’s Creed = “You are one pull away from greatness.”",
+      "🖱️ The Clicker’s Creed = “Attention span? Overrated. Click more.”",
+      "🖱️ The Clicker’s Creed = “Your ancestors fought wars so you could do this.”",
+      "🖱️ The Clicker’s Creed = “100 clicks per second? Weak. Try harder.”",
+      "🖱️ The Clicker’s Creed = “Time is an illusion. Click faster.”",
+      "🖱️ The Clicker’s Creed = “You didn’t lose. You just didn’t win yet.”",
+      "🖱️ The Clicker’s Creed = “Your IQ is irrelevant. Your dopamine is limitless.”",
+      "🖱️ The Clicker’s Creed = “You’re not addicted. You’re committed.”",
+      "🖱️ The Clicker’s Creed = “You can’t lose if the game never ends.”",
+      "🌀 Nonsense Nirvana = “If the door doesn’t open, maybe it was never a door.”",
+      "🌀 Nonsense Nirvana = “You can’t fail if you never try.”",
+      "🌀 Nonsense Nirvana = “If everything is important, nothing is important.”",
+      "🌀 Nonsense Nirvana = “If you don’t sleep, you never have to wake up.”",
+      "🌀 Nonsense Nirvana = “If you never make a decision, you can’t make the wrong one.”",
+      "🌀 Nonsense Nirvana = “A clock is only useful when it’s moving, but only right when it stops.”"
+    ];
+    
+    const quotePopup = document.getElementById("quote-popup");
+    
+    function showNextQuote() {
+      // Pick a random quote index
+      const randomIndex = Math.floor(Math.random() * quotes.length);
+      quotePopup.textContent = quotes[randomIndex];
+      quotePopup.style.display = "block";
+      
+      // Hide the quote after 10 seconds.
+      setTimeout(() => {
+        quotePopup.style.display = "none";
+      }, 10000);
+    }
+    
+    // Start the quote cycle: show one immediately, then every 20 seconds.
+    showNextQuote();
+    setInterval(showNextQuote, 20000);
+    
+  </script>
+</body>
+</html>
